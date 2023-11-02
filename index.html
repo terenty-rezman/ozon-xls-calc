@@ -14,27 +14,66 @@
     <script>
         const inputFile = document.querySelector('#file');
         const one = document.querySelector('#one');
-        let b;
         let df; 
+        let all_sells;
+        let sold_goods_sku; 
+        let sold_counts = {};
+        let sku_names = {};
+        let delivered_sells;
 
         inputFile.addEventListener("change", async () => {
             const excelFile = inputFile.files[0]
-            const columns_count = 17;
+            // const columns_count = 17;
 
-            let dtypes = [
-                "datetime", "string", "string", "datetime", "string", "int32", "string", "string"
-            ] 
+            // let dtypes = [
+            //     "datetime", "string", "string", "datetime", "string", "int32", "string", "string"
+            // ] 
 
             // rest columns are float32
-            for (let i = dtypes.length; i < 17; i++) {
-                dtypes.push("float32");
-            }
+            // for (let i = dtypes.length; i < 17; i++) {
+            //     dtypes.push("float32");
+            // }
 
-            dfd.readExcel(excelFile, {frameConfig: {dtypes: dtypes}}).then((ldf) => {
+            // dfd.readExcel(excelFile, {frameConfig: {dtypes: dtypes}}).then((ldf) => {
+            dfd.readExcel(excelFile).then((ldf) => {
                 df = ldf;
-                df = df.loc({ rows: df['Тип начисления'].eq('Доставка покупателю') });
                 console.log(df)
-                // global_df = global_df.asType("Дата начисления", "int32")
+
+                all_sells = df.loc({ rows: df['Тип начисления'].eq('Оплата эквайринга') });
+                console.log(all_sells)
+
+                sold_goods_sku = all_sells["SKU"].unique();
+                console.log(sold_goods_sku)
+
+                function calc_total_count_per_sku(sells) {
+                    // calc sold counts for each type
+                    for (let i = 0; i < sold_goods_sku.shape[0]; i++) {
+                        let sku = sold_goods_sku.iloc([i]).values[0];
+                        let sold_count = sells.loc({rows: sells["SKU"].eq(sku)})
+                            .column("Количество")
+                            .sum();
+
+                        sold_counts[sku] = sold_count;
+
+                        let article = sells.loc({rows: sells["SKU"].eq(sku)})
+                            .column("Артикул").values[0];
+
+                        let name = sells.loc({rows: sells["SKU"].eq(sku)})
+                            .column("Название товара или услуги").values[0];
+                        
+                        sku_names[sku] = `${name} ${article}`;
+                    }
+
+                    for (const [sku, count] of Object.entries(sold_counts)) {
+                        let name = sku_names[sku];
+                        console.log(`${name} ${sku}: ${count}`);
+                    }
+                }
+
+                delivered_sells = df.loc(
+                    { rows: df['Тип начисления'].eq('Доставка покупателю').and((df["За продажу или возврат до вычета комиссий и услуг"].gt(0))) }
+                );
+                console.log(delivered_sells)
             })
         })
          
