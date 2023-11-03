@@ -14,6 +14,7 @@
     <script>
         const inputFile = document.querySelector('#file');
         const one = document.querySelector('#one');
+
         let df; 
         let sku_names = {};
         let all_goods_sku; 
@@ -23,13 +24,16 @@
 
         let all_sells;
         let all_sells_counts = {};
+        let all_sells_price = {};
 
         let delivered_sells;
         let delivered_counts = {};
+        let delivered_price = {};
 
+        let sku_costprice = {};
         let sku_total = {};
 
-        function calc_total_count_per_sku(rows) {
+        function calc_goods_count_per_sku(rows) {
             let result_counts = {};
 
             for (let i = 0; i < all_goods_sku.shape[0]; i++) {
@@ -40,6 +44,21 @@
 
                 result_counts[sku] = count;
             }
+
+            return result_counts;
+        }
+
+        function calc_total_price_per_sku(rows) {
+            let result_counts = {};
+
+            for (let i = 0; i < all_goods_sku.shape[0]; i++) {
+                let sku = all_goods_sku.iloc([i]).values[0];
+                let price = rows.loc({rows: rows["SKU"].eq(sku)})
+                    .column("Итого")
+                    .sum();
+
+                result_counts[sku] = price;
+            }count
 
             return result_counts;
         }
@@ -65,18 +84,7 @@
 
         inputFile.addEventListener("change", async () => {
             const excelFile = inputFile.files[0]
-            // const columns_count = 17;
 
-            // let dtypes = [
-            //     "datetime", "string", "string", "datetime", "string", "int32", "string", "string"
-            // ] 
-
-            // rest columns are float32
-            // for (let i = dtypes.length; i < 17; i++) {
-            //     dtypes.push("float32");
-            // }
-
-            // dfd.readExcel(excelFile, {frameConfig: {dtypes: dtypes}}).then((ldf) => {
             dfd.readExcel(excelFile).then((ldf) => {
                 df = ldf;
 
@@ -85,35 +93,63 @@
                 all_goods_sku = all_sells["SKU"].unique();
                 sku_names = extract_names_for_sku(all_sells);
 
-                all_sells_counts = calc_total_count_per_sku(all_sells);
+                all_sells_counts = calc_goods_count_per_sku(all_sells);
 
                 canceled_sells = df.loc({ rows: df['Тип начисления'].eq('Доставка и обработка возврата, отмены, невыкупа') });
-                canceled_counts = calc_total_count_per_sku(canceled_sells);
+                canceled_counts = calc_goods_count_per_sku(canceled_sells);
 
-                console.log("отмены")
+                // отмены
                 for (const [sku, count] of Object.entries(canceled_counts)) {
                     let name = sku_names[sku];
-                    console.log(`${name} ${sku}: ${count}`);
                 }
 
-                console.log("все продажи")
+                // все продажи
                 for (const [sku, count] of Object.entries(all_sells_counts)) {
                     let name = sku_names[sku];
                     let cancels = canceled_counts[sku] || 0;
-                    console.log(`${name} ${sku}: ${count - cancels}`, cancels, " отмен");
+
+                    if (!sku_total[sku]) {
+                        sku_total[sku] = {};
+                    }
+
+                    sku_total[sku].name = name; 
+                    sku_total[sku].all_sells = count - cancels;
+                    sku_total[sku].cancels = cancels; 
                 }
+
 
                 delivered_sells = df.loc(
                     { rows: df['Тип начисления'].eq('Доставка покупателю').and((df["За продажу или возврат до вычета комиссий и услуг"].gt(0))) }
                 );
 
-                delivered_counts = calc_total_count_per_sku(delivered_sells);
+                delivered_counts = calc_goods_count_per_sku(delivered_sells);
+                delivered_price = calc_total_price_per_sku(delivered_sells);
 
-                console.log("доставленные")
+                // доставленные
                 for (const [sku, count] of Object.entries(delivered_counts)) {
                     let name = sku_names[sku];
                     let cancels = canceled_counts[sku] || 0;
-                    console.log(`${name} ${sku}: ${count - cancels}`, cancels, " отмен");
+
+                    if (!sku_total[sku]) {
+                        sku_total[sku] = {};
+                    }
+
+                    sku_total[sku].delivered_sells = count - cancels;
+                }
+
+                for (const [sku, sell_price] of Object.entries(delivered_price)) {
+                    let name = sku_names[sku];
+
+                    if (!sku_total[sku]) {
+                        sku_total[sku] = {};
+                    }
+
+                    sku_total[sku].all_sell_price = sell_price; 
+                }
+
+                // print all
+                for (const [sku, {name, all_sells, delivered_sells, cancels}] of Object.entries(sku_total)) {
+                    console.log(`${name} ${sku}: ${all_sells} ${all_sells_price} ${cancels} ${delivered_sells}`);
                 }
             })
         })
